@@ -9,6 +9,7 @@ import (
 	"os"
 	"strings"
 	"time"
+
 	"github.com/joho/godotenv"
 	"github.com/ynigun/translate-matrix-bot/anthropic"
 	"maunium.net/go/mautrix"
@@ -23,14 +24,14 @@ var (
 )
 
 func main() {
-	// Initialize logger
 	log.SetOutput(os.Stdout)
 	log.SetFlags(log.Ldate | log.Ltime | log.Lshortfile)
+
 	err := godotenv.Load()
 	if err != nil {
 		log.Fatalf("Error loading .env file: %v", err)
 	}
-	// Initialize Matrix client
+
 	matrixClient, err := mautrix.NewClient(os.Getenv("MATRIX_SERVER"), "", "")
 	if err != nil {
 		log.Fatalf("Error initializing Matrix client: %v", err)
@@ -50,74 +51,60 @@ func main() {
 		},
 	}
 	matrixClient.Syncer.(*mautrix.DefaultSyncer).FilterJSON = &filter
-	// Set up event handler
+
 	log.Println("Setting up event handler...")
 
 	syncer := matrixClient.Syncer.(*mautrix.DefaultSyncer)
-	syncer.OnEventType(event.EventMessage, func(ctx context.Context, evt *event.Event) {
+	syncer.OnEventType(event.EventMessage, handleMessage)
+	syncer.OnEventType(event.StateMember, handleMembership)
 
-		if evt.Sender != matrixClient.UserID {
-			message := evt.Content.AsMessage()
-			if message.MsgType == event.MsgText {
-				text := message.Body
-				if text != "" {
-					matrixClient.SendReceipt(ctx, evt.RoomID, evt.ID, event.ReceiptTypeRead, nil)
-					matrixClient.UserTyping(ctx, evt.RoomID, true, 5*time.Second)
-					translatedText, err := translateMessage(ctx, text)
-					if err != nil {
-						log.Printf("Error processing message: %v", err)
-						matrixClient.SendNotice(ctx, evt.RoomID, "שגיאה במהלך התרגום")
-					} else {
-						log.Printf("Sending translated message: %s", translatedText)
-						//matrixClient.SendText(ctx, evt.RoomID, translatedText)
-						content := event.MessageEventContent{
-							MsgType: event.MsgText,
-							Body:    translatedText,
-							RelatesTo: &event.RelatesTo{
-								InReplyTo: &event.InReplyTo{
-									//Type:    event.RelReply,
-									EventID: evt.ID,
-								},
-							},
-						}
-						matrixClient.SendMessageEvent(ctx, evt.RoomID, event.EventMessage, content)
-
-					}
-					matrixClient.UserTyping(ctx, evt.RoomID, false, 0)
-				}
-			} else {
-				log.Println("Received message with media content")
-				matrixClient.SendNotice(ctx, evt.RoomID, "ניתן לתרגם רק הודעות טקסט")
-			}
-		}
-	})
-	syncer.OnEventType(event.StateMember, func(ctx context.Context, evt *event.Event) {
-		if membership := evt.Content.AsMember().Membership; membership == event.MembershipInvite && id.UserID(evt.GetStateKey()) == matrixClient.UserID {
-			log.Printf("Received invite for room: %s", evt.RoomID)
-			matrixClient.JoinRoomByID(ctx, evt.RoomID)
-			log.Printf("Joined room: %s", evt.RoomID)
-		}
-	})
-	// Start sync loop
 	log.Println("Bot started!")
 	err = matrixClient.Sync()
 	if err != nil {
 		log.Fatalf("Sync() returned error: %v", err)
 	}
-
-	// Access the joined rooms after the initial sync
 }
 
-type TranslationRequest struct {
-	Model       string `json:"model"`
-	MaxTokens   int    `json:"max_tokens"`
-	Temperature int    `json:"temperature"`
-	Prompt      string `json:"prompt"`
+func handleMessage(ctx context.Context, evt *event.Event) {
+	if evt.Sender != matrixClient.UserID {
+		message := evt.Content.AsMessage()
+		if message.MsgType == event.MsgText {
+			text := message.Body
+			if text != "" {
+				matrixClient.SendReceipt(ctx, evt.RoomID, evt.ID, event.ReceiptTypeRead, nil)
+				matrixClient.UserTyping(ctx, evt.RoomID, true, 5*time.Second)
+				translatedText, err := translateMessage(ctx, text)
+				if err != nil {
+					log.Printf("Error processing message: %v", err)
+					matrixClient.SendNotice(ctx, evt.RoomID, "שגיאה במהלך התרגום")
+				} else {
+					log.Printf("Sending translated message: %s", translatedText)
+					content := event.MessageEventContent{
+						MsgType: event.MsgText,
+						Body:    translatedText,
+						RelatesTo: &event.RelatesTo{
+							InReplyTo: &event.InReplyTo{
+								EventID: evt.ID,
+							},
+						},
+					}
+					matrixClient.SendMessageEvent(ctx, evt.RoomID, event.EventMessage, content)
+				}
+				matrixClient.UserTyping(ctx, evt.RoomID, false, 0)
+			}
+		} else {
+			log.Println("Received message with media content")
+			matrixClient.SendNotice(ctx, evt.RoomID, "ניתן לתרגם רק הודעות טקסט")
+		}
+	}
 }
 
-type TranslationResponse struct {
-	Lang string `json:"lang"`
-	Text string `json:"text"`
+func handleMembership(ctx context.Context, evt *event.Event) {
+	if membership := evt.Content.AsMember().Membership; membership == event.MembershipInvite && id.UserID(evt.GetStateKey()) == matrixClient.UserID {
+		log.Printf("Received invite for room: %s", evt.RoomID)
+		matrixClient.JoinRoomByID(ctx, evt.RoomID)
+		log.Printf("Joined room: %s", evt.RoomID)
+	}
 }
 
 func translateMessage(ctx context.Context, text string) (string, error) {
@@ -174,6 +161,7 @@ ray AB cafe вже в усіх швидкісних поїздах Інтерс�
 תזכור שצריך לתרגם דווקא לעברית lang=he
 
 לא לתרגם לערבית או לאוקראינית`)
+
 	req := &anthropic.MessageRequest{
 		Model:     AnthropicAPIModel,
 		MaxTokens: 1024,
@@ -199,16 +187,17 @@ ray AB cafe вже в усіх швидкісних поїздах Інтерс�
 	prefix := `{
 "lang": "he",
 "text": "`
-	if strings.HasPrefix(translatedText, prefix) && strings.HasSuffix(translatedText, `"
-}`) {
+
+	Suffix := `"
+}`
+	if strings.HasPrefix(translatedText, prefix) && strings.HasSuffix(translatedText, Suffix) {
 		translatedText = strings.TrimPrefix(translatedText, prefix)
-		translatedText = strings.TrimSuffix(translatedText, `"
-}`)
+		translatedText = strings.TrimSuffix(translatedText, Suffix)
 		return translatedText, nil
 	}
 
-	var translatedData RawText
-	if err := json.Unmarshal([]byte(translatedText), &translatedData); err != nil {
+
+	if err := json.Unmarshal([]byte(translatedText), &TranslatedData); err != nil {
 		log.Printf("Error decoding JSON: %v", err)
 		return translatedText, nil
 	}
@@ -219,31 +208,7 @@ ray AB cafe вже в усіх швидкісних поїздах Інтерс�
 	return translatedData.Text, nil
 }
 
-type RawText struct {
+type TranslatedData struct {
 	Lang string `json:"lang"`
 	Text string `json:"text"`
-}
-
-func (rt *RawText) UnmarshalJSON(data []byte) error {
-	var rawJSON map[string]json.RawMessage
-	if err := json.Unmarshal(data, &rawJSON); err != nil {
-		return err
-	}
-
-	if err := json.Unmarshal(rawJSON["lang"], &rt.Lang); err != nil {
-		return err
-	}
-
-	textBytes, err := rawJSON["text"].MarshalJSON()
-	if err != nil {
-		return err
-	}
-
-	var textStr string
-	if err := json.Unmarshal(textBytes, &textStr); err != nil {
-		textStr = string(rawJSON["text"])
-	}
-	rt.Text = textStr
-
-	return nil
 }
