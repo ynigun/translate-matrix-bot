@@ -196,8 +196,8 @@ ray AB cafe вже в усіх швидкісних поїздах Інтерс�
 		return translatedText, nil
 	}
 
-
-	if err := json.Unmarshal([]byte(translatedText), &TranslatedData); err != nil {
+	translatedData := TranslatedData{}
+	if err := json.Unmarshal([]byte(translatedText), &translatedData); err != nil {
 		log.Printf("Error decoding JSON: %v", err)
 		return translatedText, nil
 	}
