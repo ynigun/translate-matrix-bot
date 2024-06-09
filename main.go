@@ -32,7 +32,7 @@ func main() {
 		log.Fatalf("Error loading .env file: %v", err)
 	}
 
-	matrixClient, err := mautrix.NewClient(os.Getenv("MATRIX_SERVER"), "", "")
+	matrixClient, err = mautrix.NewClient(os.Getenv("MATRIX_SERVER"), "", "")
 	if err != nil {
 		log.Fatalf("Error initializing Matrix client: %v", err)
 	}
