@@ -2,12 +2,10 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/joho/godotenv"
@@ -116,9 +114,6 @@ func translateMessage(ctx context.Context, text string) (string, error) {
 
 	prompt := fmt.Sprintf(`תרגם את הטקסט לעברית
 שמור על דיוק בתרגום
-
-אם אתה לא יול לתרגם את הטקסט פשוט כתוב 
-"לא יכול לתרגם"
 `)
 
 	req := &anthropic.MessageRequest{
