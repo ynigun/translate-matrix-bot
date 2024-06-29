@@ -114,25 +114,51 @@ func getFilterKeywords() ([]string, error) {
 	return keywords, nil
 }
 
+
 func handleMessage(ctx context.Context, evt *event.Event) {
 	if evt.Sender != matrixClient.UserID {
 		message := evt.Content.AsMessage()
 		if message.MsgType == event.MsgText {
 			text := message.Body
 			if text != "" {
+				if evt.Sender == adminUserID {
+					// פקודות ממשתמש מנהל
+					if strings.HasPrefix(text, "!add ") {
+						keyword := strings.TrimPrefix(text, "!add ")
+						if err := addFilterKeyword(keyword); err != nil {
+							log.Printf("Error adding filter keyword: %v", err)
+						} else {
+							matrixClient.SendNotice(ctx, evt.RoomID, fmt.Sprintf("Added filter keyword: %s", keyword))
+						}
+						return
+					} else if strings.HasPrefix(text, "!remove ") {
+						keyword := strings.TrimPrefix(text, "!remove ")
+						if err := removeFilterKeyword(keyword); err != nil {
+							log.Printf("Error removing filter keyword: %v", err)
+						} else {
+							matrixClient.SendNotice(ctx, evt.RoomID, fmt.Sprintf("Removed filter keyword: %s", keyword))
+						}
+						return
+					}
+				}
+				
 				keywords, err := getFilterKeywords()
 				if err != nil {
 					log.Printf("Error getting filter keywords: %v", err)
 				} else {
 					shouldFilter := false
+					var matchedKeyword string
 					for _, keyword := range keywords {
 						matched, _ := regexp.MatchString(keyword, text)
 						if matched {
 							shouldFilter = true
+							matchedKeyword = keyword
 							break
 						}
 					}
-					if !shouldFilter {
+					if shouldFilter {
+						matrixClient.SendNotice(ctx, evt.RoomID, fmt.Sprintf("ההודעה שלך נחסמה מכיוון שהיא מכילה את הביטוי: %s", matchedKeyword))
+					} else {
 						matrixClient.SendReceipt(ctx, evt.RoomID, evt.ID, event.ReceiptTypeRead, nil)
 						matrixClient.UserTyping(ctx, evt.RoomID, true, 5*time.Second)
 						translatedText, err := translateMessage(ctx, text)
@@ -160,23 +186,6 @@ func handleMessage(ctx context.Context, evt *event.Event) {
 			log.Println("Received message with media content")
 			matrixClient.SendNotice(ctx, evt.RoomID, "ניתן לתרגם רק הודעות טקסט")
 		}
-	} else if evt.Sender == adminUserID {
-		// Commands from admin user
-		if strings.HasPrefix(evt.Content.AsMessage().Body, "!add ") {
-			keyword := strings.TrimPrefix(evt.Content.AsMessage().Body, "!add ")
-			if err := addFilterKeyword(keyword); err != nil {
-				log.Printf("Error adding filter keyword: %v", err)
-			} else {
-				matrixClient.SendNotice(ctx, evt.RoomID, fmt.Sprintf("Added filter keyword: %s", keyword))
-			}
-		} else if strings.HasPrefix(evt.Content.AsMessage().Body, "!remove ") {
-			keyword := strings.TrimPrefix(evt.Content.AsMessage().Body, "!remove ")
-			if err := removeFilterKeyword(keyword); err != nil {
-				log.Printf("Error removing filter keyword: %v", err)
-			} else {
-				matrixClient.SendNotice(ctx, evt.RoomID, fmt.Sprintf("Removed filter keyword: %s", keyword))
-			}
-		}
 	}
 }
 
@@ -195,9 +204,7 @@ func translateMessage(ctx context.Context, text string) (string, error) {
 		HTTP:             &http.Client{},
 	}
 
-	prompt := fmt.Sprintf(`תרגם את הטקסט לעברית
-שמור על דיוק בתרגום
-`)
+	prompt := fmt.Sprintf(`תרגם את ההודעה לעברית`)
 
 	req := &anthropic.MessageRequest{
 		Model:     AnthropicAPIModel,
