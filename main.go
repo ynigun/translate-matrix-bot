@@ -117,11 +117,10 @@ func translateMessage(ctx context.Context, text string) (string, error) {
 	prompt := fmt.Sprintf(`תרגם את הטקסט לעברית
 
 שמור על דיוק בתרגום
-אם יש ספק הצמד למקור ואל תשנה את המשמעות כדי שישמע טוב בעברית יומיומית
-עם זאת במקרה שהתרגום לא משנה מהמשמעות כדאי שהתרגום יהיה בעברית יומיומית
 
 לא מדובר בתרגום חופשי או ספרותי אלא בתרגום טכני שנועד בעיקר להעביר את התוכן והמשמעות המדויקים
 
+ההודעות מגיעות מערוץ טלגרם ואני רוצה להביםן מה כתוב
 אני אשלח את הטקסט בלי JSON
 לדוגמה
 Важливе повідомлення: зміст повідомлення
@@ -164,7 +163,7 @@ ray AB cafe вже в усіх швидкісних поїздах Інтерс�
 
 	req := &anthropic.MessageRequest{
 		Model:     AnthropicAPIModel,
-		MaxTokens: 1024,
+		MaxTokens: len([]rune(text)),
 		System:    prompt,
 		Messages: []anthropic.Message{
 			{
