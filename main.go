@@ -115,51 +115,11 @@ func translateMessage(ctx context.Context, text string) (string, error) {
 	}
 
 	prompt := fmt.Sprintf(`תרגם את הטקסט לעברית
-
 שמור על דיוק בתרגום
 
-לא מדובר בתרגום חופשי או ספרותי אלא בתרגום טכני שנועד בעיקר להעביר את התוכן והמשמעות המדויקים
-
-ההודעות מגיעות מערוץ טלגרם ואני רוצה להביםן מה כתוב
-אני אשלח את הטקסט בלי JSON
-לדוגמה
-Важливе повідомлення: зміст повідомлення
-
-ואתה תחזיר לי JSON עם התרגום לעברית
-{"lang":"he","text":"הודעה חשובה: תוכן הודעה"}
-
-דוגמה נוספת
-
-קלט:
-
-ray AB cafe вже в усіх швидкісних поїздах Інтерсіті+
-
-Щойно скуштуєте нове меню — приймаємо зворотний зв'язок всіма каналами: Viber, Telegram, Apple Messages, Facebook Messenger, у застосунку Укрзалізниці та через QR-коди безпосередньо у вагонах.
-
-Смачних та комфортних подорожей💙
-
-פלט:
-{
-"lang": "he",
-"text": "בית הקפה ray AB כבר נמצא בכל רכבות האינטרסיטי+ המהירות
-ברגע שתטעמו את התפריט החדש - אנו מקבלים משוב בכל הערוצים: Viber, Telegram, Apple Messages, Facebook Messenger, באפליקציה של Ukrzaliznytsia ודרך קודי QR ישירות בקרונות.
-נסיעות טעימות ונוחות💙"
-}
-
-קלט:
-🔹#عاجل وسائل إعلام يمنيّة:
-مصدر أمني ، الإعلان غداً عن إنجاز أمني استراتيجي كبير وغير مسبوق..
-
-פלט:
-{
-"lang": "he",
-"text": "🔹#דחוף כלי תקשורת תימניים:
-מקור ביטחוני, מחר יוכרז על הישג ביטחוני אסטרטגי גדול וחסר תקדים.."
-}
-
-תזכור שצריך לתרגם דווקא לעברית lang=he
-
-לא לתרגם לערבית או לאוקראינית`)
+אם אתה לא יול לתרגם את הטקסט פשוט כתוב 
+"לא יכול לתרגם"
+`)
 
 	req := &anthropic.MessageRequest{
 		Model:     AnthropicAPIModel,
@@ -183,28 +143,8 @@ ray AB cafe вже в усіх швидкісних поїздах Інтерс�
 	}
 
 	translatedText := resp.Content[0].(map[string]interface{})["text"].(string)
-	prefix := `{
-"lang": "he",
-"text": "`
 
-	Suffix := `"
-}`
-	if strings.HasPrefix(translatedText, prefix) && strings.HasSuffix(translatedText, Suffix) {
-		translatedText = strings.TrimPrefix(translatedText, prefix)
-		translatedText = strings.TrimSuffix(translatedText, Suffix)
-		return translatedText, nil
-	}
-
-	translatedData := TranslatedData{}
-	if err := json.Unmarshal([]byte(translatedText), &translatedData); err != nil {
-		log.Printf("Error decoding JSON: %v", err)
-		return translatedText, nil
-	}
-
-	if translatedData.Lang != "he" {
-		return "", fmt.Errorf("translated language is not Hebrew (he)")
-	}
-	return translatedData.Text, nil
+	return translatedText, nil
 }
 
 type TranslatedData struct {
