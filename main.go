@@ -10,7 +10,7 @@ import (
 	"regexp"
 	"strings"
 	"time"
-
+	"unicode"
 	"github.com/joho/godotenv"
 	"github.com/ynigun/translate-matrix-bot/anthropic"
 	_ "github.com/mattn/go-sqlite3"
@@ -161,7 +161,15 @@ func handleMessage(ctx context.Context, evt *event.Event) {
 					} else {
 						matrixClient.SendReceipt(ctx, evt.RoomID, evt.ID, event.ReceiptTypeRead, nil)
 						matrixClient.UserTyping(ctx, evt.RoomID, true, 5*time.Second)
-						translatedText, err := translateMessage(ctx, text)
+						
+
+						// Remove emojis from the entire text
+						textWithoutEmojis := removeEmojis(text)
+						
+						// Remove signature after removing emojis
+						textWithoutSignature := removeSignature(textWithoutEmojis)
+						
+						translatedText, err := translateMessage(ctx, textWithoutSignature)
 						if err != nil {
 							log.Printf("Error processing message: %v", err)
 							matrixClient.SendNotice(ctx, evt.RoomID, "שגיאה במהלך התרגום")
@@ -197,6 +205,63 @@ func handleMembership(ctx context.Context, evt *event.Event) {
 	}
 }
 
+func removeEmojis(text string) string {
+	emojiRegex := regexp.MustCompile(`[\p{So}\p{Sk}]`)
+	return emojiRegex.ReplaceAllString(text, "")
+}
+
+func removeSignature(text string) string {
+	// Split the text into lines
+	lines := strings.Split(strings.TrimSpace(text), "\n")
+
+	// If there's only one line, return it as is
+	if len(lines) <= 1 {
+		return text
+	}
+
+	// Check if the last line looks like a signature
+	lastLine := strings.TrimSpace(lines[len(lines)-1])
+	
+	// Define patterns for signatures
+	signaturePatterns := []string{
+		`^-\s.*`,                    // Lines starting with "- "
+		`^[—–]\s.*`,                 // Lines starting with "— " or "– "
+		`^[~\*]\s.*`,                // Lines starting with "~ " or "* "
+		`^[\p{L}\p{N}]+:?\s.*`,      // Lines starting with a name followed by ": " or just " "
+		`^[•✦★☆◆◇■□●○]\s.*`,        // Lines starting with various bullet points
+		`^[\p{So}\p{Sk}]+.*`,        // Lines starting with special characters or symbols
+		`^.*\s?[\p{So}\p{Sk}]+$`,    // Lines ending with special characters or symbols
+		`^.*™$`,                     // Lines ending with ™
+	}
+
+	isSignature := false
+	for _, pattern := range signaturePatterns {
+		if matched, _ := regexp.MatchString(pattern, lastLine); matched {
+			isSignature = true
+			break
+		}
+	}
+
+	// Additional check for lines that are mostly non-letter characters
+	if !isSignature {
+		nonLetterCount := 0
+		for _, r := range lastLine {
+			if !unicode.IsLetter(r) {
+				nonLetterCount++
+			}
+		}
+		if float64(nonLetterCount)/float64(len(lastLine)) > 0.5 {
+			isSignature = true
+		}
+	}
+
+	if isSignature {
+		// Remove the last line if it matches a signature pattern
+		return strings.TrimSpace(strings.Join(lines[:len(lines)-1], "\n"))
+	}
+
+	return text
+}
 func translateMessage(ctx context.Context, text string) (string, error) {
 	client := &anthropic.Client{
 		APIKey:           os.Getenv("ANTHROPIC_API_KEY"),
